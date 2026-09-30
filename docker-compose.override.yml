@@ -1,0 +1,50 @@
+# Local integration with Better Screening — loaded automatically by `docker compose`.
+#
+# Runs this service separately from the backend while sharing what must be shared:
+#   - Redis: the backend's Redis (host port 6379), so both sides see the same BullMQ
+#     queues (`transcription`, `transcription-events`). Our own `redis` service is
+#     disabled (start it with `--profile standalone` if you run this service alone).
+#   - Audio: ./data/audio (gitignored) is bind-mounted at /data/audio; the backend
+#     writes each answer's recording there (TRANSCRIPTION_AUDIO_DIR) before enqueueing.
+#   - Postgres: this service's own database, moved to host port 5435 so it doesn't
+#     clash with a local Postgres on 5432.
+
+x-backend-redis: &backend-redis
+  environment:
+    REDIS_URL: redis://host.docker.internal:6379/0
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  redis:
+    profiles: ["standalone"]
+
+  postgres:
+    ports: !override
+      - "5435:5432"
+
+  migrate:
+    <<: *backend-redis
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+
+  worker:
+    <<: *backend-redis
+    volumes: !override
+      - ./data/audio:/data/audio:ro
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *backend-redis
+    volumes: !override
+      - ./data/audio:/data/audio:ro
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
