@@ -20,6 +20,9 @@ services:
     profiles: ["standalone"]
 
   postgres:
+    # The base file gives postgres no restart policy, so after a reboot the worker
+    # (which does restart) crash-loops without its database and jobs pile up.
+    restart: unless-stopped
     ports: !override
       - "5435:5432"
 
